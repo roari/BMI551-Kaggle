@@ -1,0 +1,89 @@
+setwd("C:/Users/Charlie/Google Drive/School/BMI 511 - Algorithms II/Kaggle/Data")
+
+
+expression <- read.table("expression.txt", row.names=1)
+training_answers <- read.table("training_set_answers.txt",row.names=1)
+subtypes <- read.table("subtypes.txt",row.names=0)
+colnames(subtypes) <- c("celline", "subtype")
+subtypes <- subtypes[2:40,]
+
+mappings <- read.csv("scoring_and_test_set_id_mappings.csv")
+public = mappings[mappings$Usage=="Public",]
+
+training_names <- as.factor()
+
+names <- names(expression)
+names[1] <- "184A1"
+names[2] <- "600MPE"
+names(expression) <- names
+
+
+public <- rownames(training_answers)
+tmp <- colnames(expression)
+is_train = (tmp %in% public)
+is_train
+
+train_exp <- expression[,is_train]
+
+train_type <- subtypes[is_train,2]
+
+
+subNorm <- subtypes$subtype =="Normal-like"
+subBasal <- subtypes$subtype == "Basal"
+subClaud <- subtypes$subtype == "Claudin-low"
+subLum <- subtypes$subtype == "Luminal"
+rng <- c(1:18632)
+meanExpN <- as.numeric(0)
+meanExpB <- as.numeric(0)
+meanExpC <- as.numeric(0)
+meanExpL <- as.numeric(0)
+for (i in rng){
+  meanExpN[i] <- mean(as.numeric(expression[i,subNorm]))
+  meanExpB[i] <- mean(as.numeric(expression[i,subBasal]))
+  meanExpC[i] <- mean(as.numeric(expression[i,subClaud]))
+  meanExpL[i] <- mean(as.numeric(expression[i,subLum]))
+}
+
+
+
+
+
+drug_names <- colnames(training_answers)
+tmp <- c(1:25)
+
+train_ans <- data.frame(0)
+tmp_num <- c(1:300)
+
+for (i in tmp_num){
+#  train_ans[i,1] = public[floor((i-1)/12)+1]
+#  train_ans[i,2] = drug_names[(i-1)%%12+1]
+#  train_ans[i,3] = training_answers[floor((i-1)/12)+1,(i-1)%%12+1]
+  train_ans[i,4] = train_type[floor((i-1)/12)+1]
+}
+
+colnames(train_ans) <- c("celline", "drug", "response","subtype")
+
+
+
+
+trainT <- t(train_exp)
+trainT <- cbind(trainT, train_type)
+
+tmp <- c(1:300)
+tmp <- tmp%%12==1
+
+library(glmnet)
+
+cvFit <- cv.glmnet(trainT, train_ans[tmp,3],family="binomial",type.measure="class",nfolds=5)
+
+cvMin1 <- cvFit$lambda.min
+
+
+
+
+
+
+
+
+
+
