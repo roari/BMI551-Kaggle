@@ -7,7 +7,7 @@ subtypes <- read.table("subtypes.txt",row.names=0)
 colnames(subtypes) <- c("celline", "subtype")
 subtypes <- subtypes[2:40,]
 
-mappings <- read.csv("scoring_and_test_set_id_mappings.csv")
+mappings <- read.csv("scoring_and_test_set_id_mappings_dot.csv")
 public = mappings[mappings$Usage=="Public",]
 
 training_names <- as.factor()
@@ -24,9 +24,10 @@ is_train = (tmp %in% public)
 is_train
 
 train_exp <- expression[,is_train]
+test_exp <- expression[,!is_train]
 
 train_type <- subtypes[is_train,2]
-
+test_type <- subtypes[!is_train,2]
 
 subNorm <- subtypes$subtype =="Normal-like"
 subBasal <- subtypes$subtype == "Basal"
@@ -69,20 +70,52 @@ colnames(train_ans) <- c("celline", "drug", "response","subtype")
 trainT <- t(train_exp)
 trainT <- cbind(trainT, train_type)
 
-tmp <- c(1:300)
-tmp <- tmp%%12==1
+testT <- t(test_exp)
+testT <- cbind(testT, test_type)
 
 library(glmnet)
 
-cvFit <- cv.glmnet(trainT, train_ans[tmp,3],family="binomial",type.measure="class",nfolds=5)
 
-cvMin1 <- cvFit$lambda.min
+cvFit[1] <- tmp_3
+ind = c(1:300)
+tmp = c(1:12)
+
+for (i in 1:12){
+  nam <- paste("cvFit",i,sep =".")
+  assign(nam,cv.glmnet(trainT, train_ans[((ind-1)%%12+1)==i,3],family="binomial",type.measure="class",nfolds=5))
+}
+
+for (i in 1:12){
+  obj = get(paste("cvFit",i,sep="."))
+  nam <- paste("predTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.min, type="class"))
+}
 
 
 
+test_names <- rownames(testT)
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
 
 
 
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+submission <- data.frame(0)
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("predTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response", "v4")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+write.csv(merged_submission,file="submission_1.csv")
 
 
 
