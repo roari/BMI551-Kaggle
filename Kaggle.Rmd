@@ -7,8 +7,170 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(glmnet)
+library(e1071)
+```
+
+```{r read in the data}
+expression <- read.table("expression.txt", row.names=1)
+training_answers <- read.table("training_set_answers.txt",row.names=1)
+subtypes <- read.table("subtypes.txt", header = TRUE)
+#colnames(subtypes) <- c("cellline", "subtype")
+#subtypes <- subtypes[2:40,]
+mappings <- read.csv("scoring_and_test_set_id_mappings_dot.csv")
+```
+
+
+```{r EDA}
+dim(expression)
+head(expression)
+dim(training_answers)
+head(training_answers)
+dim(subtypes)
+head(subtypes)
+dim(mappings)
+head(mappings)
+```
+
+```{r from Charlie}
+#Data wrangling
+public = mappings[mappings$Usage=="Public",]
+
+#training_names <- as.factor()
+
+names <- names(expression)
+names[1] <- "184A1"
+names[2] <- "600MPE"
+names(expression) <- names
+
+
+public <- rownames(training_answers)
+tmp <- colnames(expression)
+is_train = (tmp %in% public)
+is_train
+
+train_exp <- expression[,is_train]
+test_exp <- expression[,!is_train]
+
+train_type <- subtypes[is_train,2]
+test_type <- subtypes[!is_train,2]
+
+subNorm <- subtypes$subtype =="Normal-like"
+subBasal <- subtypes$subtype == "Basal"
+subClaud <- subtypes$subtype == "Claudin-low"
+subLum <- subtypes$subtype == "Luminal"
+rng <- c(1:18632)
+meanExpN <- as.numeric(0)
+meanExpB <- as.numeric(0)
+meanExpC <- as.numeric(0)
+meanExpL <- as.numeric(0)
+for (i in rng){
+  meanExpN[i] <- mean(as.numeric(expression[i,subNorm]))
+  meanExpB[i] <- mean(as.numeric(expression[i,subBasal]))
+  meanExpC[i] <- mean(as.numeric(expression[i,subClaud]))
+  meanExpL[i] <- mean(as.numeric(expression[i,subLum]))
+}
+
+
+drug_names <- colnames(training_answers)
+tmp <- c(1:25)
+
+train_ans <- data.frame(0)
+tmp_num <- c(1:300)
+
+for (i in tmp_num){
+  train_ans[i,1] = public[floor((i-1)/12)+1]
+  train_ans[i,2] = drug_names[(i-1)%%12+1]
+  train_ans[i,3] = training_answers[floor((i-1)/12)+1,(i-1)%%12+1]
+  train_ans[i,4] = train_type[floor((i-1)/12)+1]
+}
+
+colnames(train_ans) <- c("cellline", "drug", "response","subtype")
+
+#lasso time!
+trainT <- t(train_exp)
+trainT <- cbind(trainT, train_type)
+
+testT <- t(test_exp)
+testT <- cbind(testT, test_type)
+
+#cvFit[1] <- tmp_3
+ind = c(1:300)
+tmp = c(1:12)
+
+for (i in 1:12){
+  nam <- paste("cvFit",i,sep =".")
+  assign(nam,cv.glmnet(trainT, train_ans[((ind-1)%%12+1)==i,3],family="binomial",type.measure="class",nfolds=5))
+}
+
+for (i in 1:12){
+  obj = get(paste("cvFit",i,sep="."))
+  nam <- paste("predTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.min, type="class"))
+}
+
+
+
+test_names <- rownames(testT)
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
+
+
+
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+#submission <- data.frame(0)
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("predTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
+write.csv(sorted_merged_submission,file="submission_1.csv")
+
 ```
 
 ```{r}
-read.csv("")
+#try svm
+for (i in 1:12){
+  nam <- paste("SVMFit",i,sep =".")
+  assign(nam,svm(trainT, train_ans[((ind-1)%%12+1)==i,3]))
+}
+for (i in 1:12){
+  obj = get(paste("SVMFit",i,sep="."))
+  nam <- paste("SVMpredTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.min, type="class"))
+}
+test_names <- rownames(testT)
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
+
+
+
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("SVMpredTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
+write.csv(sorted_merged_submission,file="submission_2.csv")
 ```
