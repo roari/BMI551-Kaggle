@@ -3,9 +3,7 @@ setwd("C:/Users/Charlie/Google Drive/School/BMI 511 - Algorithms II/Kaggle/Data"
 
 expression <- read.table("expression.txt", row.names=1)
 training_answers <- read.table("training_set_answers.txt",row.names=1)
-subtypes <- read.table("subtypes.txt",row.names=0)
-colnames(subtypes) <- c("celline", "subtype")
-subtypes <- subtypes[2:40,]
+subtypes <- read.table("subtypes.txt",header=TRUE)
 
 mappings <- read.csv("scoring_and_test_set_id_mappings_dot.csv")
 public = mappings[mappings$Usage=="Public",]
@@ -56,9 +54,9 @@ train_ans <- data.frame(0)
 tmp_num <- c(1:300)
 
 for (i in tmp_num){
-#  train_ans[i,1] = public[floor((i-1)/12)+1]
-#  train_ans[i,2] = drug_names[(i-1)%%12+1]
-#  train_ans[i,3] = training_answers[floor((i-1)/12)+1,(i-1)%%12+1]
+  train_ans[i,1] = public[floor((i-1)/12)+1]
+  train_ans[i,2] = drug_names[(i-1)%%12+1]
+  train_ans[i,3] = training_answers[floor((i-1)/12)+1,(i-1)%%12+1]
   train_ans[i,4] = train_type[floor((i-1)/12)+1]
 }
 
@@ -76,19 +74,18 @@ testT <- cbind(testT, test_type)
 library(glmnet)
 
 
-cvFit[1] <- tmp_3
 ind = c(1:300)
 tmp = c(1:12)
 
 for (i in 1:12){
   nam <- paste("cvFit",i,sep =".")
-  assign(nam,cv.glmnet(trainT, train_ans[((ind-1)%%12+1)==i,3],family="binomial",type.measure="class",nfolds=5))
+  assign(nam,cv.glmnet(trainT, train_ans[((ind-1)%%12+1)==i,3],family="binomial",nfolds=5))
 }
 
 for (i in 1:12){
   obj = get(paste("cvFit",i,sep="."))
-  nam <- paste("predTest",i,sep =".")
-  assign(nam,predict(obj, newx = testT, s=obj$lambda.min, type="class"))
+  nam <- paste("predTestM",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.1se, type="response"))
 }
 
 
@@ -104,18 +101,19 @@ for (i in c(1:168)){
 
 
 ##Note: this requires that "submission" already be an appropriately-sized dataframe. 
-submission <- data.frame(0)
+#submission <- data.frame(0)
 for (j in c(0:11)){
   for (i in c(1:14)){
-    obj <- get(paste("predTest",j+1,sep="."))
+    obj <- get(paste("predTestM",j+1,sep="."))
     submission[i+14*j,3] <- as.numeric(obj[i])
   }
 }
 
-colnames(submission) <- c("cellline", "drug", "response", "v4")
+colnames(submission) <- c("cellline", "drug", "response")
 
 merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
-write.csv(merged_submission,file="submission_1.csv")
+
+write.csv(merged_submission,file="submission_8.csv")
 
 
 
