@@ -1,4 +1,5 @@
 setwd("C:/Users/Charlie/Google Drive/School/BMI 511 - Algorithms II/Kaggle/Data")
+library(glmnet)
 
 
 expression <- read.table("expression.txt", row.names=1)
@@ -71,7 +72,6 @@ trainT <- cbind(trainT, train_type)
 testT <- t(test_exp)
 testT <- cbind(testT, test_type)
 
-library(glmnet)
 
 
 ind = c(1:300)
@@ -120,8 +120,8 @@ write.csv(merged_submission,file="submission_8.csv")
 
 #####################SVM###################
 
-install.packages("e1071")
-install.packages("tidyverse")
+#install.packages("e1071")
+#install.packages("tidyverse")
 library(e1071)
 library(tidyverse)
 
@@ -238,6 +238,79 @@ merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
 sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
 write.csv(sorted_merged_submission,file="submission_15.csv",row.names=FALSE)
 
+
+
+
+
+
+######################################Lambda testing##############################################
+
+
+
+for (i in 1:12){
+  nam <- paste("cvFit",i,sep =".")
+  assign(nam,cv.glmnet(trainT, train_ans[((ind-1)%%12+1)==i,3],family="binomial",nfolds=5,nlambda=100,type.measure="mse"))
+#  nam2 <- paste("Coefs",i,sep=".")
+#  obj = get(paste("cvFit",i,sep="."))
+#  assign(nam2,coef(obj,s=obj$lambda))
+}
+
+for (i in 1:12){
+  obj = get(paste("cvFit",i,sep="."))
+  nam <- paste("predTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.1se, type="class"))
+}
+
+
+
+test_names <- rownames(testT)
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
+
+
+
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+#submission <- data.frame(0)
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("predTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
+write.csv(sorted_merged_submission,file="submission_17.csv",row.names=FALSE)
+
+
+
+
+######### Wilcoxon Test #########
+##I need to get the "independence_test" function to work, from the "coin" library.
+##Need to figure out how to specify "xtrafo" and "ytrafo" parameters.
+library(stats)
+library(coin)
+
+
+filt <- as.logical(0)
+for (i in 1:12){
+  tmp <- as.logical(0)
+  response <- as.logical(train_ans[((ind-1)%%12+1)==i,3]==1)
+  for (j in 1:18633){
+    tmp_obj <- independence_test(c(trainT[,1],as.factor(response)),teststat="scalar",xtrafo=f_traf(),ytrafo=rank())
+    tmp[j] <- (wilcox.test(x=trainT[response,j],y=trainT[!response,j])$p.value <= .05)
+  }
+  length(tmp)
+  filt[i] <- c(tmp)
+}
+
+table(filt[1])
 
 
 
