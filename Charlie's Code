@@ -118,3 +118,134 @@ write.csv(merged_submission,file="submission_8.csv")
 
 
 
+#####################SVM###################
+
+install.packages("e1071")
+install.packages("tidyverse")
+library(e1071)
+library(tidyverse)
+
+
+for (i in 1:12){
+  nam <- paste("SVMFit",i,sep =".")
+  assign(nam,svm(trainT, train_ans[((ind-1)%%12+1)==i,3],kernel="radial"))
+}
+for (i in 1:12){
+  obj = get(paste("SVMFit",i,sep="."))
+  nam <- paste("SVMpredTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.1se, type="class"))
+}
+test_names <- rownames(testT)
+
+
+
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
+
+
+
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("SVMpredTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
+write.csv(sorted_merged_submission,file="submission_12.csv",row.names=FALSE)
+
+
+###############################################
+
+install.packages("randomForest")
+install.packages("ROCR")
+install.packages("Hmisc")
+source("http://bioconductor.org/biocLite.R")
+biocLite("genefilter")
+library(randomForest)
+library(ROCR)
+library(genefilter)
+library(Hmisc)
+
+
+
+ffun=filterfun(pOverA(p = 0.2, A = 100), cv(a = 0.7, b = 10))
+
+filt=genefilter(2^train_exp,ffun)
+
+filt_Data=train_exp[filt,] 
+
+predictor_data <- as.data.frame(t(filt_Data))
+predictor_names <- c(as.vector(rownames(filt_Data)))
+colnames(predictor_data)=predictor_names
+
+test_data_filt <- test_exp[filt,]
+test_data_filt <- as.data.frame(t(test_data_filt))
+colnames(test_data_filt) <- predictor_names
+
+
+
+min_size <- as.numeric(0)
+for (i in 1:12){
+  tmp <- as.vector(table(train_ans[((ind-1)%%12+1)==i,3]))
+  min_size[i] <- tmp[order(tmp,decreasing=FALSE)[1]]
+  min_size[i] <- rep(min_size[i],2)
+}
+
+for (i in 1:12){
+  nam <- paste("RFFit",i,sep =".")
+  assign(nam,randomForest(x=trainT, y=train_ans[((ind-1)%%12+1)==i,3], ntree=25001))
+}
+for (i in 1:12){
+  obj = get(paste("RFFit",i,sep="."))
+  nam <- paste("RFpredTest",i,sep =".")
+  assign(nam,predict(obj, newx = testT, s=obj$lambda.1se, type="class"))
+}
+
+
+
+
+
+
+
+submission <- data.frame(0)
+for (i in c(1:168)){
+  submission[i,1] <- test_names[(i-1)%%14+1]
+  submission[i,2] <- drug_names[floor((i-1)/14+1)]
+}
+
+
+
+##Note: this requires that "submission" already be an appropriately-sized dataframe. 
+for (j in c(0:11)){
+  for (i in c(1:14)){
+    obj <- get(paste("RFpredTest",j+1,sep="."))
+    submission[i+14*j,3] <- as.numeric(obj[i])
+  }
+}
+
+colnames(submission) <- c("cellline", "drug", "response")
+
+merged_submission <- merge(mappings, submission, by.x=c("cellline","drug"))
+sorted_merged_submission <- merged_submission %>% select(id, value = response) %>% arrange(id)
+write.csv(sorted_merged_submission,file="submission_15.csv",row.names=FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
